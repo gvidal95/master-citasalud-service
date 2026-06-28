@@ -1,0 +1,119 @@
+{
+  "proyecto": "citamedicos-service",
+  "version": "0.0.1-SNAPSHOT",
+  "fecha": "2026-06-28",
+  "commit": "no-git",
+  "tests": {
+    "comando": "./gradlew test jacocoTestReport",
+    "passed": 76,
+    "total": 76,
+    "failed": 0,
+    "coverage": 92.68,
+    "coverage_fuente": "build/reports/jacoco/test/jacocoTestReport.xml"
+  },
+  "security": {
+    "fuente": "grep manual sobre src/main/java y src/main/resources (Semgrep MCP no disponible en esta sesion)",
+    "critical": 0,
+    "high": 2,
+    "secrets": 0,
+    "hallazgos": [
+      {
+        "severity": "HIGH",
+        "archivo": "src/main/resources/application.yaml:26-27",
+        "descripcion": "H2 console habilitada (h2.console.enabled: true, path: /h2-console) sin autenticacion. Expone el navegador de base de datos en HTTP sin ninguna restriccion de acceso."
+      },
+      {
+        "severity": "HIGH",
+        "archivo": "src/main/java/org/ups/citamedicos/adapter/in/web/CitaController.java, MedicoController.java",
+        "descripcion": "No existe ninguna configuracion de Spring Security (SecurityFilterChain, @EnableWebSecurity, @PreAuthorize). Todos los endpoints REST son publicamente accesibles sin autenticacion ni autorizacion."
+      }
+    ]
+  },
+  "spec": "specs/001-reserva-cita-online/spec.md",
+  "criteria": [
+    {
+      "id": "FR-001",
+      "fuente": "spec.md · FR-001",
+      "status": "desconocido",
+      "evidencia": "FR-001 es un requisito no-funcional de disponibilidad 24/7 (SLA). No existe test de uptime, health check ni configuracion de resiliencia. No es falsificable mediante tests unitarios o de integracion. Estado: desconocido."
+    },
+    {
+      "id": "FR-002",
+      "fuente": "spec.md · FR-002",
+      "status": "incumple",
+      "evidencia": "Tests solo cubren LIBRE: ConsultarDisponibilidadUseCaseTest.given_medicoWithFranjasLibres_when_execute_then_returnOnlyLibres y MedicoControllerMvcTest.given_validMedicoId_when_getDisponibilidad_then_200_onlyFranjasLibres. No existe test que verifique OCUPADA o BLOQUEADA. FR-002 exige diferenciar los tres estados."
+    },
+    {
+      "id": "FR-003",
+      "fuente": "spec.md · FR-003",
+      "status": "incumple",
+      "evidencia": "BuscarMedicosUseCaseTest cubre filtro por especialidad (nombre=null) y sin filtros. En los tres tests el parametro nombre es null. No existe test que filtre por nombre solo ni por la combinacion especialidad+nombre. La parte y/o nombre del FR-003 carece de cobertura."
+    },
+    {
+      "id": "FR-004",
+      "fuente": "spec.md · FR-004",
+      "status": "incumple",
+      "evidencia": "ReservarCitaUseCaseTest.given_franjaOcupada_when_execute_then_throwsFranjaNoDisponibleException verifica rechazo secuencial. FranjaHorariaEntity tiene @Version (linea 37). Sin embargo no existe test concurrente (Thread/ExecutorService/CountDownLatch) que ejercite race condition real. El control de concurrencia no esta probado bajo carga concurrente."
+    },
+    {
+      "id": "FR-005",
+      "fuente": "spec.md · FR-005",
+      "status": "incumple",
+      "evidencia": "ReservarCitaUseCaseTest.given_franjaLibre_when_execute_then_citaSavedAndNotificacionDispatched verifica que se dispara notificacion pero NO verifica el contenido del mensaje. WhatsAppCloudApiAdapter.java:32-34 solo incluye nombre del medico y codigo. Faltan: especialidad, fecha, hora y lugar de atencion que exige FR-005."
+    },
+    {
+      "id": "FR-006",
+      "fuente": "spec.md · FR-006",
+      "status": "cumple",
+      "evidencia": "CodigoCitaTest verifica generacion de codigos unicos. ReservarCitaFuncionalTest.given_sameIdempotencyKey_when_postCitasTwice_then_sameCodigo_and_noDuplicate verifica codigo en respuesta HTTP. WhatsAppCloudApiAdapter.java:34 incluye cita.getCodigo().getValue() en el mensaje."
+    },
+    {
+      "id": "FR-007",
+      "fuente": "spec.md · FR-007",
+      "status": "incumple",
+      "evidencia": "CitaControllerPostMvcTest.given_franjaOcupada_when_postCitas_then_409 verifica solo el HTTP 409. No hace ninguna asercion sobre el campo alternativas en el cuerpo de respuesta. FR-007 exige presentar alternativas y ningun test lo verifica."
+    },
+    {
+      "id": "FR-008",
+      "fuente": "spec.md · FR-008",
+      "status": "cumple",
+      "evidencia": "ReservarCitaUseCaseTest.given_pacienteAlreadyHasCitaSameDia_when_execute_then_throwsCitaDuplicadaException verifica la excepcion CitaDuplicadaException. GlobalExceptionHandlerMvcTest.given_citaDuplicada_when_post_then_422 verifica HTTP 422 con codigo CITA_DUPLICADA."
+    },
+    {
+      "id": "FR-009",
+      "fuente": "spec.md · FR-009",
+      "status": "cumple",
+      "evidencia": "CancelarCitaFuncionalTest.given_pacienteWithCita_when_getCitasPaciente_then_200_withCitaListedAndEstadoConfirmada verifica GET /api/v1/pacientes/{pacienteId}/citas devuelve 200 con lista no vacia. ConsultarCitasPacienteUseCaseTest.given_pacienteWithCitas_when_execute_then_returnConfirmadasSortedByFecha verifica a nivel unitario."
+    },
+    {
+      "id": "FR-010",
+      "fuente": "spec.md · FR-010",
+      "status": "incumple",
+      "evidencia": "CancelarCitaUseCaseTest verifica cancelacion y liberacion de franja, pero pacienteRepositoryPort.findById() retorna Optional.empty() en el test, por lo que la notificacion de cancelacion se omite silenciosamente (CancelarCitaUseCaseImpl.java:53-55). Ningun test verifica que el paciente recibe WhatsApp de cancelacion. FR-010 exige notificacion obligatoria."
+    },
+    {
+      "id": "FR-011",
+      "fuente": "spec.md · FR-011",
+      "status": "incumple",
+      "evidencia": "No existe test que simule fallo de WhatsApp y verifique que la cita queda registrada y el sistema reintenta asincronamente. La implementacion tiene @Async + @Retryable(maxAttempts=3) en WhatsAppCloudApiAdapter.java:29-30, pero sin cobertura de prueba para el caso de fallo."
+    },
+    {
+      "id": "EC-001",
+      "fuente": "spec.md · Edge Cases (idempotencia)",
+      "status": "cumple",
+      "evidencia": "ReservarCitaFuncionalTest.given_sameIdempotencyKey_when_postCitasTwice_then_sameCodigo_and_noDuplicate verifica end-to-end idempotencia. ReservarCitaUseCaseTest.given_idempotencyKeyExists_when_execute_then_returnExistingCita verifica que no se llama save() en duplicado. CitaJpaAdapterTest.given_idempotencyKey_when_findByIdempotencyKey_then_returnsNonEmpty verifica persistencia."
+    },
+    {
+      "id": "EC-002",
+      "fuente": "spec.md · Edge Cases (WhatsApp no disponible)",
+      "status": "incumple",
+      "evidencia": "No existe test que simule WhatsApp no disponible y verifique que la cita queda registrada y se activa reintento asincrono. Mismo hallazgo que FR-011."
+    },
+    {
+      "id": "EC-003",
+      "fuente": "spec.md · Edge Cases (doble agendamiento)",
+      "status": "cumple",
+      "evidencia": "ReservarCitaUseCaseTest.given_pacienteAlreadyHasCitaSameDia_when_execute_then_throwsCitaDuplicadaException verifica que mismo paciente/medico/fecha lanza CitaDuplicadaException. GlobalExceptionHandlerMvcTest.given_citaDuplicada_when_post_then_422 verifica HTTP 422. Mismo test que FR-008."
+    }
+  ]
+}

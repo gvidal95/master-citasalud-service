@@ -1,0 +1,32 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: citamedicos-service
+  datasource:
+    url: jdbc:h2:mem:citamedicos;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema.sql
+      data-locations: classpath:db/data.sql
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+whatsapp:
+  api-url: https://graph.facebook.com/v19.0
+  bearer-token: ${WHATSAPP_TOKEN:dev-token-placeholder}
+  phone-number-id: ${WHATSAPP_PHONE_ID:dev-phone-id}

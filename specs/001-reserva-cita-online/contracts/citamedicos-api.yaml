@@ -1,0 +1,466 @@
+openapi: "3.1.0"
+
+info:
+  title: citamedicos-service API
+  description: |
+    Servicio de reserva de citas médicas en línea 24/7.
+    Permite a los pacientes buscar médicos disponibles, reservar franjas horarias,
+    consultar sus citas activas y cancelar citas con antelación.
+  version: "1.0.0"
+  contact:
+    name: UPS — Ingeniería de Software
+    email: gabrielwv1095@gmail.com
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Servidor de desarrollo local
+
+tags:
+  - name: medicos
+    description: Búsqueda y disponibilidad de médicos
+  - name: citas
+    description: Reserva, consulta y cancelación de citas
+
+paths:
+
+  # ─────────────────────────────────────────
+  # MÉDICOS
+  # ─────────────────────────────────────────
+
+  /medicos:
+    get:
+      tags: [medicos]
+      operationId: buscarMedicos
+      summary: Buscar médicos por especialidad o nombre
+      description: |
+        Retorna la lista de médicos que coinciden con los filtros opcionales.
+        Si no se proveen filtros, retorna todos los médicos disponibles.
+      parameters:
+        - name: especialidad
+          in: query
+          required: false
+          description: Filtrar por especialidad médica (coincidencia parcial, insensible a mayúsculas)
+          schema:
+            type: string
+            example: "Cardiología"
+        - name: nombre
+          in: query
+          required: false
+          description: Filtrar por nombre del médico (coincidencia parcial, insensible a mayúsculas)
+          schema:
+            type: string
+            example: "García"
+      responses:
+        "200":
+          description: Lista de médicos que coinciden con los filtros
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MedicoResponse"
+              example:
+                - id: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                  nombre: "Dra. Ana García"
+                  especialidad: "Cardiología"
+                  lugarAtencion: "Consultorios Norte, Piso 2"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /medicos/{medicoId}/disponibilidad:
+    get:
+      tags: [medicos]
+      operationId: consultarDisponibilidad
+      summary: Consultar franjas horarias disponibles de un médico
+      description: |
+        Retorna las franjas horarias con estado LIBRE para el médico indicado
+        dentro del rango de fechas solicitado. El rango máximo permitido es de 60 días.
+      parameters:
+        - name: medicoId
+          in: path
+          required: true
+          description: Identificador único del médico
+          schema:
+            type: string
+            format: uuid
+            example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        - name: fechaDesde
+          in: query
+          required: true
+          description: Fecha inicio del rango de búsqueda (inclusive), formato ISO 8601
+          schema:
+            type: string
+            format: date
+            example: "2026-07-01"
+        - name: fechaHasta
+          in: query
+          required: true
+          description: Fecha fin del rango de búsqueda (inclusive), formato ISO 8601. Máximo 60 días desde fechaDesde.
+          schema:
+            type: string
+            format: date
+            example: "2026-07-15"
+      responses:
+        "200":
+          description: Lista de franjas horarias disponibles (estado LIBRE)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FranjaHorariaResponse"
+              example:
+                - id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                  medicoId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                  fecha: "2026-07-03"
+                  horaInicio: "09:00"
+                  horaFin: "09:30"
+                  estado: "LIBRE"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ─────────────────────────────────────────
+  # CITAS
+  # ─────────────────────────────────────────
+
+  /citas:
+    post:
+      tags: [citas]
+      operationId: reservarCita
+      summary: Reservar una cita médica
+      description: |
+        Registra una nueva cita para el paciente autenticado en la franja horaria
+        indicada. Si la franja ya está ocupada, retorna 409.
+
+        Para garantizar idempotencia ante pérdidas de conexión, el cliente DEBE enviar
+        el header `Idempotency-Key` con un UUID único por intento de reserva. Si el
+        servidor ya procesó esa clave, retorna la cita original sin crear un duplicado.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: UUID único por intento; permite reenvío seguro ante cortes de red
+          schema:
+            type: string
+            format: uuid
+            example: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReservarCitaRequest"
+            example:
+              pacienteId: "a3bb189e-8bf9-3888-9912-ace4e6543002"
+              franjaHorariaId: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+      responses:
+        "201":
+          description: Cita registrada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CitaResponse"
+              example:
+                codigo: "550e8400-e29b-41d4-a716-446655440000"
+                pacienteId: "a3bb189e-8bf9-3888-9912-ace4e6543002"
+                medico:
+                  id: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                  nombre: "Dra. Ana García"
+                  especialidad: "Cardiología"
+                  lugarAtencion: "Consultorios Norte, Piso 2"
+                fecha: "2026-07-03"
+                horaInicio: "09:00"
+                horaFin: "09:30"
+                estado: "CONFIRMADA"
+                creadaEn: "2026-06-27T22:15:00Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: La franja horaria solicitada ya está ocupada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FranjaNoDisponibleErrorResponse"
+              example:
+                codigo: "FRANJA_NO_DISPONIBLE"
+                mensaje: "La franja horaria seleccionada ya no está disponible."
+                detalle: "Por favor elija otra franja horaria para el médico indicado."
+                alternativas:
+                  - id: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+                    medicoId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                    fecha: "2026-07-03"
+                    horaInicio: "09:30"
+                    horaFin: "10:00"
+                    estado: "LIBRE"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /pacientes/{pacienteId}/citas:
+    get:
+      tags: [citas]
+      operationId: consultarCitasPaciente
+      summary: Consultar citas activas del paciente
+      description: |
+        Retorna el listado de citas en estado CONFIRMADA del paciente indicado,
+        ordenadas por fecha y hora de inicio ascendente.
+      parameters:
+        - name: pacienteId
+          in: path
+          required: true
+          description: Identificador único del paciente
+          schema:
+            type: string
+            format: uuid
+            example: "a3bb189e-8bf9-3888-9912-ace4e6543002"
+      responses:
+        "200":
+          description: Listado de citas activas del paciente
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CitaResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /citas/{codigoCita}:
+    delete:
+      tags: [citas]
+      operationId: cancelarCita
+      summary: Cancelar una cita confirmada
+      description: |
+        Cancela la cita identificada por su código único. Solo es posible cancelar
+        citas en estado CONFIRMADA con al menos 24 horas de antelación al inicio
+        de la franja horaria. Al cancelar, la franja queda disponible nuevamente
+        y se envía notificación al paciente por WhatsApp.
+      parameters:
+        - name: codigoCita
+          in: path
+          required: true
+          description: Código único de la cita (UUID v4)
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        "204":
+          description: Cita cancelada exitosamente
+        "400":
+          description: No se puede cancelar — menos de 24 horas de antelación
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                codigo: "CANCELACION_FUERA_DE_PLAZO"
+                mensaje: "No es posible cancelar la cita con menos de 24 horas de antelación."
+                detalle: "Para cancelaciones de último momento comuníquese al teléfono de la clínica."
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: La cita ya fue cancelada o atendida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+# ─────────────────────────────────────────
+# COMPONENTS
+# ─────────────────────────────────────────
+
+components:
+
+  schemas:
+
+    MedicoResponse:
+      type: object
+      required: [id, nombre, especialidad, lugarAtencion]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador único del médico
+        nombre:
+          type: string
+          description: Nombre completo del médico
+          example: "Dra. Ana García"
+        especialidad:
+          type: string
+          description: Especialidad médica
+          example: "Cardiología"
+        lugarAtencion:
+          type: string
+          description: Ubicación física donde atiende
+          example: "Consultorios Norte, Piso 2"
+
+    FranjaHorariaResponse:
+      type: object
+      required: [id, medicoId, fecha, horaInicio, horaFin, estado]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador único de la franja
+        medicoId:
+          type: string
+          format: uuid
+          description: Identificador del médico al que pertenece
+        fecha:
+          type: string
+          format: date
+          description: Fecha de la franja, formato ISO 8601 (YYYY-MM-DD)
+          example: "2026-07-03"
+        horaInicio:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+          description: Hora de inicio de la franja (HH:mm)
+          example: "09:00"
+        horaFin:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+          description: Hora de fin de la franja (HH:mm)
+          example: "09:30"
+        estado:
+          type: string
+          enum: [LIBRE, OCUPADA, BLOQUEADA]
+          description: Estado actual de la franja
+
+    ReservarCitaRequest:
+      type: object
+      required: [pacienteId, franjaHorariaId]
+      properties:
+        pacienteId:
+          type: string
+          format: uuid
+          description: Identificador único del paciente que reserva
+        franjaHorariaId:
+          type: string
+          format: uuid
+          description: Identificador de la franja horaria seleccionada
+
+    CitaResponse:
+      type: object
+      required: [codigo, pacienteId, medico, fecha, horaInicio, horaFin, estado, creadaEn]
+      properties:
+        codigo:
+          type: string
+          format: uuid
+          description: Código único de la cita
+        pacienteId:
+          type: string
+          format: uuid
+          description: Identificador del paciente
+        medico:
+          $ref: "#/components/schemas/MedicoResponse"
+        fecha:
+          type: string
+          format: date
+          description: Fecha de la cita
+          example: "2026-07-03"
+        horaInicio:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+          description: Hora de inicio de la cita
+          example: "09:00"
+        horaFin:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+          description: Hora de fin de la cita
+          example: "09:30"
+        estado:
+          type: string
+          enum: [CONFIRMADA, CANCELADA, ATENDIDA]
+          description: Estado actual de la cita
+        creadaEn:
+          type: string
+          format: date-time
+          description: Marca de tiempo de creación (UTC), formato ISO 8601
+          example: "2026-06-27T22:15:00Z"
+
+    ErrorResponse:
+      type: object
+      required: [codigo, mensaje]
+      properties:
+        codigo:
+          type: string
+          description: Código de error de negocio
+          example: "FRANJA_NO_DISPONIBLE"
+        mensaje:
+          type: string
+          description: Mensaje legible para el usuario
+          example: "La franja horaria seleccionada ya no está disponible."
+        detalle:
+          type: string
+          description: Información adicional o sugerencia de acción
+          example: "Por favor elija otra franja horaria para el médico indicado."
+
+    FranjaNoDisponibleErrorResponse:
+      description: |
+        Error 409 específico para conflicto de franja ocupada.
+        Extiende ErrorResponse con una lista de franjas alternativas disponibles
+        para el mismo médico, cumpliendo FR-007.
+      allOf:
+        - $ref: "#/components/schemas/ErrorResponse"
+        - type: object
+          properties:
+            alternativas:
+              type: array
+              description: Franjas horarias LIBRE disponibles para el mismo médico
+              items:
+                $ref: "#/components/schemas/FranjaHorariaResponse"
+
+  responses:
+
+    BadRequest:
+      description: Solicitud inválida — parámetros faltantes o con formato incorrecto
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            codigo: "SOLICITUD_INVALIDA"
+            mensaje: "Los parámetros de la solicitud son inválidos."
+            detalle: "El campo 'franjaHorariaId' es obligatorio."
+
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            codigo: "RECURSO_NO_ENCONTRADO"
+            mensaje: "El recurso solicitado no existe."
+
+    UnprocessableEntity:
+      description: Datos semánticamente inválidos (regla de negocio violada)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            codigo: "CITA_DUPLICADA"
+            mensaje: "Ya tiene una cita activa con este médico en esa fecha."
+
+    InternalServerError:
+      description: Error interno del servidor
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            codigo: "ERROR_INTERNO"
+            mensaje: "Ocurrió un error inesperado. Por favor intente nuevamente."

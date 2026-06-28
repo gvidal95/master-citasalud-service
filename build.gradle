@@ -1,0 +1,127 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.1.0'
+    id 'io.spring.dependency-management' version '1.1.7'
+    id 'org.openapi.generator' version '7.6.0'
+    id 'jacoco'
+}
+
+group = 'org.ups'
+version = '0.0.1-SNAPSHOT'
+description = 'citamedicos-service'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.retry:spring-retry:2.0.12'
+    implementation 'org.springframework:spring-aspects'
+    implementation 'io.swagger.core.v3:swagger-annotations:2.2.25'
+    implementation 'io.swagger.core.v3:swagger-models:2.2.25'
+    implementation 'org.openapitools:jackson-databind-nullable:0.2.6'
+    compileOnly 'org.projectlombok:lombok'
+    runtimeOnly 'com.h2database:h2'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.boot:spring-boot-webmvc-test'
+    testImplementation 'org.springframework.boot:spring-boot-data-jpa-test'
+    testImplementation 'org.springframework.boot:spring-boot-restclient'
+    testImplementation 'org.springframework.boot:spring-boot-resttestclient'
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.3.0'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// T002 — Principle IV: API First — generate stubs from OpenAPI contract
+openApiGenerate {
+    generatorName = "spring"
+    inputSpec = "$rootDir/src/main/resources/openapi/citamedicos-api.yaml"
+    outputDir = "$buildDir/generated/openapi"
+    apiPackage = "org.ups.citamedicos.adapter.in.web.generated"
+    modelPackage = "org.ups.citamedicos.adapter.in.web.generated.dto"
+    configOptions = [
+        interfaceOnly      : "true",
+        useSpringBoot3     : "true",
+        generateApiTests   : "false",
+        generateModelTests : "false",
+        useTags            : "true"
+    ]
+}
+
+sourceSets.main.java.srcDirs += "$buildDir/generated/openapi/src/main/java"
+compileJava.dependsOn tasks.openApiGenerate
+
+// T003 — Principle V: JaCoCo coverage gates
+jacoco {
+    toolVersion = "0.8.13"
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                '**/CitamedicosServiceApplication*',
+                '**/generated/**',
+                '**/infrastructure/config/**'
+            ])
+        }))
+    }
+}
+
+jacocoTestCoverageVerification {
+    dependsOn jacocoTestReport
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                '**/CitamedicosServiceApplication*',
+                '**/generated/**',
+                '**/infrastructure/config/**'
+            ])
+        }))
+    }
+    violationRules {
+        rule {
+            limit {
+                counter = 'INSTRUCTION'
+                value   = 'COVEREDRATIO'
+                minimum = 0.80
+            }
+        }
+        rule {
+            element = 'CLASS'
+            excludes = [
+                'org.ups.citamedicos.CitamedicosServiceApplication',
+                'org.ups.citamedicos.adapter.in.web.generated.*',
+                'org.ups.citamedicos.infrastructure.config.*'
+            ]
+            limit {
+                counter = 'INSTRUCTION'
+                value   = 'COVEREDRATIO'
+                minimum = 0.80
+            }
+        }
+    }
+}
+
+check.dependsOn jacocoTestCoverageVerification
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
