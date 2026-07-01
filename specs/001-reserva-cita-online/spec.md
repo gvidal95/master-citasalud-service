@@ -128,6 +128,13 @@ disponible nuevamente.
 
 - **FR-001**: El sistema DEBE estar disponible para recibir reservas las 24 horas del
   día, los 7 días de la semana, incluyendo días festivos.
+  > **Nota de implementación**: La disponibilidad 24/7 es una responsabilidad compartida
+  > entre el código y la infraestructura de despliegue. El código cumple su parte
+  > exponiendo `GET /actuator/health` (Spring Boot Actuator), que permite a cualquier
+  > monitor externo (Kubernetes liveness probe, UptimeRobot, Grafana, etc.) verificar
+  > que el servicio responde. El SLA concreto (p. ej. 99,5 % mensual definido en SC-006)
+  > depende del entorno de despliegue y no es falsificable mediante tests unitarios o de
+  > integración.
 - **FR-002**: El sistema DEBE mostrar al paciente la disponibilidad actualizada de
   franjas horarias por médico, diferenciando visualmente las disponibles de las
   ocupadas o bloqueadas.

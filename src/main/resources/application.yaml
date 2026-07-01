@@ -26,6 +26,15 @@ spring:
       enabled: true
       path: /h2-console
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: always
+
 whatsapp:
   api-url: https://graph.facebook.com/v19.0
   bearer-token: ${WHATSAPP_TOKEN:dev-token-placeholder}
